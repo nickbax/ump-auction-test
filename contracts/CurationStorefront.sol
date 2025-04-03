@@ -11,6 +11,7 @@ error InvalidPaymentAddress();
 error NotTokenOwner();
 error NotCurator();
 error CurationNotFound();
+error BatchSizeInvalid();
 
 interface IStorefront {
     function listings(uint256 tokenId) external view returns (
@@ -34,7 +35,8 @@ interface IAffiliateStorefront {
 }
 
 contract CurationStorefront is ERC721URIStorage, Ownable {
-    string public constant VERSION = "0.0.1";
+    string public constant VERSION = "0.0.2";
+    uint8 public constant MAX_BATCH_SIZE = 20; //TODO: Figure out optimal max size
 
     struct CuratedListing {
         address storefrontAddress;  // Address of the original storefront
@@ -91,6 +93,8 @@ contract CurationStorefront is ERC721URIStorage, Ownable {
         address indexed curator
     );
 
+    event MetadataUpdated(uint256 indexed curationId, string newTokenURI);
+
     constructor() ERC721("UMP Curated Storefronts", "UMPCURATOR") Ownable(msg.sender) {}
 
     modifier onlyCurator(uint256 curationId) {
@@ -98,6 +102,15 @@ contract CurationStorefront is ERC721URIStorage, Ownable {
             revert NotCurator();
         }
         _;
+    }
+
+    function setCurationMetadata(
+        uint256 curationId, 
+        string calldata newTokenURI
+    ) external onlyTokenOwner(curationId) 
+    {
+        _setTokenURI(curationId, newTokenURI);
+        emit MetadataUpdated(curationId, newTokenURI);
     }
 
     modifier onlyTokenOwner(uint256 curationId) {
@@ -196,6 +209,97 @@ contract CurationStorefront is ERC721URIStorage, Ownable {
         
         listing.active = active;
         emit ListingUpdated(curationId, listingId, active);
+    }
+
+        /**
+     * @notice Struct for batch listing input to make function parameters cleaner
+     * @dev This struct represents a single listing to be added to a curation
+     */
+    struct BatchListingInput {
+        address storefrontAddress;
+        uint256 tokenId;
+    }
+
+
+        /**
+     * @notice Batch curate multiple listings from different storefronts
+     * @param curationId The ID of the curation
+     * @param listingsToAdd Array of BatchListingInput structs containing storefront addresses and token IDs
+     * @return listingIds Array of the newly created listing IDs
+     */
+    function batchCurateListings(
+        uint256 curationId,
+        BatchListingInput[] calldata listingsToAdd
+    ) external onlyCurator(curationId) returns (uint256[] memory) {
+        if (listingsToAdd.length == 0 || listingsToAdd.length > MAX_BATCH_SIZE) revert BatchSizeInvalid();
+        
+        Curation storage curation = curations[curationId];
+        uint256[] memory listingIds = new uint256[](listingsToAdd.length);
+        address[] memory storefrontAddresses = new address[](listingsToAdd.length);
+        uint256[] memory tokenIds = new uint256[](listingsToAdd.length);
+        
+        // Validate all listings exist before making any changes
+        for (uint256 i = 0; i < listingsToAdd.length; i++) {
+            BatchListingInput calldata input = listingsToAdd[i];
+            
+            if (input.storefrontAddress == address(0)) revert InvalidStorefront();
+            
+            // Verify the listing exists in the storefront
+            IStorefront storefront = IStorefront(input.storefrontAddress);
+            (uint256 listedTokenId,,,) = storefront.listings(input.tokenId);
+            if (listedTokenId == 0) revert ListingNotFound();
+            
+            // Store for event emission
+            storefrontAddresses[i] = input.storefrontAddress;
+            tokenIds[i] = input.tokenId;
+        }
+        
+        // Add all listings after validation
+        for (uint256 i = 0; i < listingsToAdd.length; i++) {
+            uint256 listingId = curation.nextListingId++;
+            listingIds[i] = listingId;
+            
+            BatchListingInput calldata input = listingsToAdd[i];
+            curation.listings[listingId] = CuratedListing({
+                storefrontAddress: input.storefrontAddress,
+                tokenId: input.tokenId,
+                active: true
+            });
+            
+            // Emit individual event for each listing added
+            emit ListingCurated(curationId, listingId, input.storefrontAddress, input.tokenId);
+        }
+        
+        return listingIds;
+    }
+    /**
+     * @notice Batch update the active state of multiple listings
+     * @param curationId The ID of the curation
+     * @param listingIds Array of listing IDs to update
+     * @param activeStates Array of active states to set (must match listingIds length)
+     */
+    function batchUpdateListings(
+        uint256 curationId,
+        uint256[] calldata listingIds,
+        bool[] calldata activeStates
+    ) external onlyCurator(curationId) {
+        if (listingIds.length == 0) revert BatchSizeInvalid();
+        if (listingIds.length > MAX_BATCH_SIZE) revert BatchSizeInvalid();
+        if (listingIds.length != activeStates.length) revert("Length mismatch");
+        
+        Curation storage curation = curations[curationId];
+        
+        for (uint256 i = 0; i < listingIds.length; i++) {
+            uint256 listingId = listingIds[i];
+            CuratedListing storage listing = curation.listings[listingId];
+            if (listing.storefrontAddress == address(0)) revert ListingNotFound();
+            
+            bool newActiveState = activeStates[i];
+            listing.active = newActiveState;
+            
+            // Emit individual event for each update
+            emit ListingUpdated(curationId, listingId, newActiveState);
+        }
     }
 
     function getCurationDetails(uint256 curationId) external view returns (

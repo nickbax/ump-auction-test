@@ -1,8 +1,8 @@
 {
   "contractName": "CurationStorefront",
-  "address": "0x7b1B48E021cc00eE5e0a4CD57d23eE2b922078c3",
+  "address": "0xdFCA83ff7544Acb88B5D04A9101d58780243E0cb",
   "constructorArguments": [],
-  "deploymentTime": "2025-02-18T16:30:28.980Z",
+  "deploymentTime": "2025-03-21T21:30:27.029Z",
   "network": "basemainnet",
   "chainId": 8453,
   "abi": [
@@ -10,6 +10,11 @@
       "inputs": [],
       "stateMutability": "nonpayable",
       "type": "constructor"
+    },
+    {
+      "inputs": [],
+      "name": "BatchSizeInvalid",
+      "type": "error"
     },
     {
       "inputs": [],
@@ -378,6 +383,25 @@
       "inputs": [
         {
           "indexed": true,
+          "internalType": "uint256",
+          "name": "curationId",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "newTokenURI",
+          "type": "string"
+        }
+      ],
+      "name": "MetadataUpdated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
           "internalType": "address",
           "name": "previousOwner",
           "type": "address"
@@ -443,6 +467,32 @@
       "type": "event"
     },
     {
+      "inputs": [],
+      "name": "MAX_BATCH_SIZE",
+      "outputs": [
+        {
+          "internalType": "uint8",
+          "name": "",
+          "type": "uint8"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "VERSION",
+      "outputs": [
+        {
+          "internalType": "string",
+          "name": "",
+          "type": "string"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
       "inputs": [
         {
           "internalType": "uint256",
@@ -495,6 +545,65 @@
         }
       ],
       "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "curationId",
+          "type": "uint256"
+        },
+        {
+          "components": [
+            {
+              "internalType": "address",
+              "name": "storefrontAddress",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "tokenId",
+              "type": "uint256"
+            }
+          ],
+          "internalType": "struct CurationStorefront.BatchListingInput[]",
+          "name": "listingsToAdd",
+          "type": "tuple[]"
+        }
+      ],
+      "name": "batchCurateListings",
+      "outputs": [
+        {
+          "internalType": "uint256[]",
+          "name": "",
+          "type": "uint256[]"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "curationId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256[]",
+          "name": "listingIds",
+          "type": "uint256[]"
+        },
+        {
+          "internalType": "bool[]",
+          "name": "activeStates",
+          "type": "bool[]"
+        }
+      ],
+      "name": "batchUpdateListings",
+      "outputs": [],
+      "stateMutability": "nonpayable",
       "type": "function"
     },
     {
@@ -657,6 +766,11 @@
           "internalType": "uint16",
           "name": "affiliateFee",
           "type": "uint16"
+        },
+        {
+          "internalType": "address",
+          "name": "erc1155Token",
+          "type": "address"
         }
       ],
       "stateMutability": "view",
@@ -908,6 +1022,24 @@
         }
       ],
       "name": "setApprovalForAll",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "curationId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "string",
+          "name": "newTokenURI",
+          "type": "string"
+        }
+      ],
+      "name": "setCurationMetadata",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"

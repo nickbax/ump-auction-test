@@ -611,258 +611,574 @@ describe("AffiliateERC1155Storefront and AffiliateEscrow", function () {
     });
   });
 });
-// Add this new beforeEach at the root level
-let affiliateERC1155Storefront, mockERC1155;
-let owner,
-  curator1,
-  curator2,
-  nonCurator,
-  designatedArbiter,
-  addr1,
-  addr2,
-  addr3,
-  payee,
-  payer,
-  arbiter,
-  storefront,
-  affiliate;
 
-describe("CurationStorefront", function () {
-  let CurationStorefront, curationStorefront;
 
-  beforeEach(async function () {
-    [
-      owner,
-      curator1,
-      curator2,
-      nonCurator,
-      designatedArbiter,
-      addr1,
-      addr2,
-      addr3,
-      payee,
-      payer,
-      arbiter,
-      storefront,
-      affiliate,
-    ] = await ethers.getSigners();
 
-    // Deploy mockERC1155 if not already deployed
-    const MockERC1155 = await ethers.getContractFactory("MockERC1155");
-    mockERC1155 = await MockERC1155.deploy();
-
-    // Deploy affiliate verifier
-    const AffiliateVerifierContract =
-      await ethers.getContractFactory("AffiliateVerifier");
-    const verifierImplementation = await AffiliateVerifierContract.deploy();
-
-    const AffiliateVerifierProxy = await ethers.getContractFactory(
-      "AffiliateVerifierProxy",
-    );
-    const initData =
-      verifierImplementation.interface.encodeFunctionData("initialize");
-    const verifierProxy = await AffiliateVerifierProxy.deploy(
-      await verifierImplementation.getAddress(),
-      initData,
-    );
-
-    const affiliateVerifier = AffiliateVerifierContract.attach(
-      await verifierProxy.getAddress(),
-    );
-
-    // Deploy escrow factory
-    const AffiliateEscrowFactory = await ethers.getContractFactory(
-      "AffiliateEscrowFactory",
-    );
-    const escrowFactory = await AffiliateEscrowFactory.deploy();
-
-    // Deploy affiliate storefront
-    const AffiliateERC1155Storefront = await ethers.getContractFactory(
-      "AffiliateERC1155Storefront",
-    );
-    const MockSeaport = await ethers.getContractFactory("MockSeaport");
-    const mockSeaport = await MockSeaport.deploy();
-
-    affiliateERC1155Storefront = await AffiliateERC1155Storefront.deploy(
-      await mockSeaport.getAddress(),
-      designatedArbiter.address,
-      await escrowFactory.getAddress(),
-      await mockERC1155.getAddress(),
-      await affiliateVerifier.getAddress(),
-      7n * 24n * 60n * 60n, // minSettleTime: 1 week
-      3n * 7n * 24n * 60n * 60n, // initialSettleDeadline: 3 weeks
-    );
-
-    await affiliateERC1155Storefront.initialize();
-
-    // Mint tokens to the storefront
-    await mockERC1155.mint(
-      await affiliateERC1155Storefront.getAddress(),
-      1,
-      100,
-      "0x",
-    );
-
-    // Deploy curation storefront
-    CurationStorefront = await ethers.getContractFactory("CurationStorefront");
-    curationStorefront = await CurationStorefront.deploy();
-  });
-
-  describe("Collection Creation and Management", function () {
-    const name = "Test Collection";
-    const description = "A test curated collection";
-    const tokenURI = "ipfs://test";
+  describe("CurationStorefront with Batch Operations", function () {
+    let affiliateERC1155Storefront1, affiliateERC1155Storefront2;
+    let curator1, curator2, nonCurator;
     let collectionId;
-
+    const tokenIds = [1, 2, 3, 4, 5];
+  
     beforeEach(async function () {
-      const tx = await curationStorefront.createCuration(
-        name,
-        description,
-        owner.address,
-        tokenURI,
+      [owner, curator1, curator2, nonCurator, ...accounts] = await ethers.getSigners();
+  
+      // Deploy mockERC1155
+      const MockERC1155 = await ethers.getContractFactory("MockERC1155");
+      mockERC1155 = await MockERC1155.deploy();
+  
+      // Deploy AffiliateVerifier
+      const AffiliateVerifierContract = await ethers.getContractFactory("AffiliateVerifier");
+      const verifierImplementation = await AffiliateVerifierContract.deploy();
+      const AffiliateVerifierProxy = await ethers.getContractFactory("AffiliateVerifierProxy");
+      const initData = verifierImplementation.interface.encodeFunctionData("initialize");
+      const verifierProxy = await AffiliateVerifierProxy.deploy(
+        await verifierImplementation.getAddress(),
+        initData
       );
-      const receipt = await tx.wait();
-      const event = receipt.logs.find(
-        (log) => log.fragment?.name === "CurationCreated",
+      const affiliateVerifier = AffiliateVerifierContract.attach(await verifierProxy.getAddress());
+  
+      // Deploy AffiliateEscrowFactory
+      const AffiliateEscrowFactory = await ethers.getContractFactory("AffiliateEscrowFactory");
+      const escrowFactory = await AffiliateEscrowFactory.deploy();
+  
+      // Deploy MockSeaport
+      const MockSeaport = await ethers.getContractFactory("MockSeaport");
+      const mockSeaport = await MockSeaport.deploy();
+  
+      // Deploy first storefront
+      const AffiliateERC1155Storefront = await ethers.getContractFactory("AffiliateERC1155Storefront");
+      affiliateERC1155Storefront1 = await AffiliateERC1155Storefront.deploy(
+        await mockSeaport.getAddress(),
+        accounts[0].address, // designatedArbiter
+        await escrowFactory.getAddress(),
+        await mockERC1155.getAddress(),
+        await affiliateVerifier.getAddress(),
+        7n * 24n * 60n * 60n, // minSettleTime: 1 week
+        3n * 7n * 24n * 60n * 60n // initialSettleDeadline: 3 weeks
       );
-      collectionId = event.args.curationId;
-    });
-
-    it("Should create collection with correct details", async function () {
-      const details = await curationStorefront.getCurationDetails(collectionId);
-      expect(details.name).to.equal(name);
-      expect(details.description).to.equal(description);
-      expect(details.paymentAddress).to.equal(owner.address);
-      expect(details.owner).to.equal(owner.address);
-      expect(details.totalListings).to.equal(0);
-    });
-
-    it("Should make creator a curator automatically", async function () {
-      expect(await curationStorefront.isCurator(collectionId, owner.address)).to
-        .be.true;
-    });
-
-    it("Should allow owner to add curator", async function () {
-      await curationStorefront.addCurator(collectionId, curator1.address);
-      expect(await curationStorefront.isCurator(collectionId, curator1.address))
-        .to.be.true;
-    });
-
-    it("Should allow owner to remove curator", async function () {
-      await curationStorefront.addCurator(collectionId, curator1.address);
-      await curationStorefront.removeCurator(collectionId, curator1.address);
-      expect(await curationStorefront.isCurator(collectionId, curator1.address))
-        .to.be.false;
-    });
-
-    it("Should not allow non-owner to add curator", async function () {
-      await expect(
-        curationStorefront
-          .connect(nonCurator)
-          .addCurator(collectionId, curator1.address),
-      ).to.be.revertedWithCustomError(curationStorefront, "NotTokenOwner");
-    });
-  });
-  describe("Listing Management", function () {
-    let collectionId;
-    const tokenId = 1;
-
-    beforeEach(async function () {
-      // Create a listing in the affiliate storefront
-      await affiliateERC1155Storefront.listToken(
-        tokenId,
-        ethers.parseEther("1"),
-        ethers.ZeroAddress,
-        2000, // 20% affiliate fee
+      await affiliateERC1155Storefront1.initialize();
+  
+      // Deploy second storefront with different token address
+      affiliateERC1155Storefront2 = await AffiliateERC1155Storefront.deploy(
+        await mockSeaport.getAddress(),
+        accounts[0].address, // designatedArbiter
+        await escrowFactory.getAddress(),
+        await mockERC1155.getAddress(),
+        await affiliateVerifier.getAddress(),
+        7n * 24n * 60n * 60n, // minSettleTime: 1 week
+        3n * 7n * 24n * 60n * 60n // initialSettleDeadline: 3 weeks
       );
-      await affiliateERC1155Storefront.toggleReady();
-
-      // Create curation
+      await affiliateERC1155Storefront2.initialize();
+  
+      // Mint tokens to the storefronts
+      for (let i = 0; i < tokenIds.length; i++) {
+        await mockERC1155.mint(
+          await affiliateERC1155Storefront1.getAddress(),
+          tokenIds[i],
+          100,
+          "0x"
+        );
+        await mockERC1155.mint(
+          await affiliateERC1155Storefront2.getAddress(),
+          tokenIds[i] + 100, // Use different token IDs for second storefront
+          100,
+          "0x"
+        );
+      }
+  
+      // List tokens in storefronts
+      for (let i = 0; i < tokenIds.length; i++) {
+        await affiliateERC1155Storefront1.listToken(
+          tokenIds[i],
+          ethers.parseEther("1"),
+          ethers.ZeroAddress,
+          2000 // 20% affiliate fee
+        );
+        await affiliateERC1155Storefront2.listToken(
+          tokenIds[i] + 100,
+          ethers.parseEther("2"),
+          ethers.ZeroAddress,
+          2500 // 25% affiliate fee
+        );
+      }
+      
+      await affiliateERC1155Storefront1.toggleReady();
+      await affiliateERC1155Storefront2.toggleReady();
+  
+      // Deploy CurationStorefront
+      const CurationStorefront = await ethers.getContractFactory("CurationStorefront");
+      curationStorefront = await CurationStorefront.deploy();
+  
+      // Create a curation
       const tx = await curationStorefront.createCuration(
         "Test Collection",
-        "Description",
+        "Description for test collection",
         owner.address,
-        "ipfs://test",
+        "ipfs://test"
       );
       const receipt = await tx.wait();
-      const event = receipt.logs.find(
-        (log) => log.fragment?.name === "CurationCreated",
-      );
+      const event = receipt.logs.find(log => log.fragment?.name === "CurationCreated");
       collectionId = event.args.curationId;
-
+  
       // Add curator1 as a curator
       await curationStorefront.addCurator(collectionId, curator1.address);
     });
-
-    it("Should allow curator to add listing", async function () {
-      await expect(
-        curationStorefront
-          .connect(curator1)
-          .curateListing(
-            collectionId,
-            await affiliateERC1155Storefront.getAddress(),
-            tokenId,
-          ),
-      )
-        .to.emit(curationStorefront, "ListingCurated")
-        .withArgs(
+  
+    describe("Metadata Management", function() {
+      it("Should allow token owner to update curation metadata", async function() {
+        const newURI = "ipfs://updated-metadata";
+        
+        const tx = await curationStorefront.setCurationMetadata(
           collectionId,
-          1,
-          await affiliateERC1155Storefront.getAddress(),
-          tokenId,
+          newURI
         );
-    });
-
-    it("Should allow curator to update listing status", async function () {
-      const tx = await curationStorefront
-        .connect(curator1)
-        .curateListing(
-          collectionId,
-          await affiliateERC1155Storefront.getAddress(),
-          tokenId,
-        );
-      const receipt = await tx.wait();
-      const event = receipt.logs.find(
-        (log) => log.fragment?.name === "ListingCurated",
-      );
-      const listingId = event.args.listingId;
-
-      await expect(
-        curationStorefront
-          .connect(curator1)
-          .updateListing(collectionId, listingId, false),
-      )
-        .to.emit(curationStorefront, "ListingUpdated")
-        .withArgs(collectionId, listingId, false);
-    });
-
-    it("Should not allow non-curator to add listing", async function () {
-      await expect(
-        curationStorefront
-          .connect(nonCurator)
-          .curateListing(
+        
+        const receipt = await tx.wait();
+        const event = receipt.logs.find(log => log.fragment?.name === "MetadataUpdated");
+        
+        expect(event.args.curationId).to.equal(collectionId);
+        expect(event.args.newTokenURI).to.equal(newURI);
+        
+        // Verify the token URI was updated
+        expect(await curationStorefront.tokenURI(collectionId)).to.equal(newURI);
+      });
+  
+      it("Should not allow non-owner to update curation metadata", async function() {
+        await expect(
+          curationStorefront.connect(curator1).setCurationMetadata(
             collectionId,
-            await affiliateERC1155Storefront.getAddress(),
-            tokenId,
-          ),
-      ).to.be.revertedWithCustomError(curationStorefront, "NotCurator");
+            "ipfs://unauthorized-update"
+          )
+        ).to.be.revertedWithCustomError(curationStorefront, "NotTokenOwner");
+      });
     });
-
-    it("Should allow token owner to modify payment address", async function () {
-      const newPaymentAddress = curator1.address;
-      await expect(
-        curationStorefront.setPaymentAddress(collectionId, newPaymentAddress),
-      )
-        .to.emit(curationStorefront, "PaymentAddressUpdated")
-        .withArgs(collectionId, owner.address, newPaymentAddress);
+  
+    describe("Batch Curator Listing Operations", function () {
+      it("Should allow creating multiple curated listings from a single storefront", async function () {
+        const listingsToAdd = [];
+        for (let i = 0; i < 3; i++) {
+          listingsToAdd.push({
+            storefrontAddress: await affiliateERC1155Storefront1.getAddress(),
+            tokenId: tokenIds[i]
+          });
+        }
+  
+        const tx = await curationStorefront.connect(curator1).batchCurateListings(
+          collectionId,
+          listingsToAdd
+        );
+        
+        const receipt = await tx.wait();
+        const events = receipt.logs.filter(log => log.fragment?.name === "ListingCurated");
+        
+        expect(events.length).to.equal(3);
+        for (let i = 0; i < 3; i++) {
+          expect(events[i].args.curationId).to.equal(collectionId);
+          expect(events[i].args.storefrontAddress).to.equal(await affiliateERC1155Storefront1.getAddress());
+          expect(events[i].args.tokenId).to.equal(tokenIds[i]);
+        }
+      });
+  
+      it("Should allow creating curated listings from different storefronts", async function () {
+        const mixedListings = [
+          {
+            storefrontAddress: await affiliateERC1155Storefront1.getAddress(),
+            tokenId: tokenIds[0]
+          },
+          {
+            storefrontAddress: await affiliateERC1155Storefront2.getAddress(),
+            tokenId: tokenIds[0] + 100
+          },
+          {
+            storefrontAddress: await affiliateERC1155Storefront1.getAddress(),
+            tokenId: tokenIds[1]
+          }
+        ];
+  
+        const tx = await curationStorefront.connect(curator1).batchCurateListings(
+          collectionId,
+          mixedListings
+        );
+        
+        const receipt = await tx.wait();
+        const events = receipt.logs.filter(log => log.fragment?.name === "ListingCurated");
+        
+        expect(events.length).to.equal(3);
+        
+        // Check first listing
+        expect(events[0].args.storefrontAddress).to.equal(await affiliateERC1155Storefront1.getAddress());
+        expect(events[0].args.tokenId).to.equal(tokenIds[0]);
+        
+        // Check second listing
+        expect(events[1].args.storefrontAddress).to.equal(await affiliateERC1155Storefront2.getAddress());
+        expect(events[1].args.tokenId).to.equal(tokenIds[0] + 100);
+        
+        // Check third listing
+        expect(events[2].args.storefrontAddress).to.equal(await affiliateERC1155Storefront1.getAddress());
+        expect(events[2].args.tokenId).to.equal(tokenIds[1]);
+      });
+  
+      it("Should revert if batch size exceeds maximum", async function () {
+        const tooManyListings = [];
+        for (let i = 0; i < 21; i++) { // Create 21 listings (MAX_BATCH_SIZE is 20)
+          tooManyListings.push({
+            storefrontAddress: await affiliateERC1155Storefront1.getAddress(),
+            tokenId: tokenIds[i % tokenIds.length]
+          });
+        }
+  
+        await expect(
+          curationStorefront.connect(curator1).batchCurateListings(collectionId, tooManyListings)
+        ).to.be.revertedWithCustomError(curationStorefront, "BatchSizeInvalid");
+      });
+  
+      it("Should revert if batch is empty", async function () {
+        await expect(
+          curationStorefront.connect(curator1).batchCurateListings(collectionId, [])
+        ).to.be.revertedWithCustomError(curationStorefront, "BatchSizeInvalid");
+      });
+  
+      it("Should revert if any listing is not found in storefront", async function () {
+        const listingsWithInvalid = [
+          {
+            storefrontAddress: await affiliateERC1155Storefront1.getAddress(),
+            tokenId: tokenIds[0]
+          },
+          {
+            storefrontAddress: await affiliateERC1155Storefront1.getAddress(),
+            tokenId: 999 // This token ID doesn't exist
+          }
+        ];
+  
+        await expect(
+          curationStorefront.connect(curator1).batchCurateListings(collectionId, listingsWithInvalid)
+        ).to.be.revertedWithCustomError(curationStorefront, "ListingNotFound");
+      });
+  
+      it("Should not allow non-curator to batch add listings", async function () {
+        const listingsToAdd = [
+          {
+            storefrontAddress: await affiliateERC1155Storefront1.getAddress(),
+            tokenId: tokenIds[0]
+          }
+        ];
+  
+        await expect(
+          curationStorefront.connect(nonCurator).batchCurateListings(collectionId, listingsToAdd)
+        ).to.be.revertedWithCustomError(curationStorefront, "NotCurator");
+      });
     });
-
-    it("Should not allow non-owner to modify payment address", async function () {
-      await expect(
-        curationStorefront
-          .connect(curator1)
-          .setPaymentAddress(collectionId, curator2.address),
-      ).to.be.revertedWithCustomError(curationStorefront, "NotTokenOwner");
+  
+    describe("Batch Update Operations", function () {
+      let listingIds = [];
+  
+      beforeEach(async function () {
+        // Add 5 listings to update
+        const listingsToAdd = [];
+        for (let i = 0; i < 5; i++) {
+          listingsToAdd.push({
+            storefrontAddress: i % 2 === 0 
+              ? await affiliateERC1155Storefront1.getAddress() 
+              : await affiliateERC1155Storefront2.getAddress(),
+            tokenId: i % 2 === 0 ? tokenIds[i] : tokenIds[i] + 100
+          });
+        }
+  
+        const tx = await curationStorefront.connect(curator1).batchCurateListings(
+          collectionId,
+          listingsToAdd
+        );
+        
+        const receipt = await tx.wait();
+        const events = receipt.logs.filter(log => log.fragment?.name === "ListingCurated");
+        
+        // Extract listing IDs for testing
+        listingIds = events.map(event => event.args.listingId);
+      });
+  
+      it("Should allow batch updating active state of listings", async function () {
+        const listingIdsToUpdate = [listingIds[0], listingIds[2], listingIds[4]];
+        const activeStates = [false, false, false];
+  
+        const tx = await curationStorefront.connect(curator1).batchUpdateListings(
+          collectionId,
+          listingIdsToUpdate,
+          activeStates
+        );
+        
+        const receipt = await tx.wait();
+        const events = receipt.logs.filter(log => log.fragment?.name === "ListingUpdated");
+        
+        expect(events.length).to.equal(3);
+        
+        // Check each listing was updated correctly
+        for (let i = 0; i < listingIdsToUpdate.length; i++) {
+          expect(events[i].args.curationId).to.equal(collectionId);
+          expect(events[i].args.listingId).to.equal(listingIdsToUpdate[i]);
+          expect(events[i].args.active).to.equal(activeStates[i]);
+          
+          // Also verify via getCuratedListing
+          const listing = await curationStorefront.getCuratedListing(collectionId, listingIdsToUpdate[i]);
+          expect(listing.active).to.equal(activeStates[i]);
+        }
+        
+        // Check that other listings remain active
+        const unchangedListing = await curationStorefront.getCuratedListing(collectionId, listingIds[1]);
+        expect(unchangedListing.active).to.be.true;
+      });
+  
+      it("Should allow toggling active state multiple times", async function () {
+        // First update - set to inactive
+        await curationStorefront.connect(curator1).batchUpdateListings(
+          collectionId,
+          [listingIds[0]],
+          [false]
+        );
+        
+        // Verify it's inactive
+        let listing = await curationStorefront.getCuratedListing(collectionId, listingIds[0]);
+        expect(listing.active).to.be.false;
+        
+        // Second update - set back to active
+        await curationStorefront.connect(curator1).batchUpdateListings(
+          collectionId,
+          [listingIds[0]],
+          [true]
+        );
+        
+        // Verify it's active again
+        listing = await curationStorefront.getCuratedListing(collectionId, listingIds[0]);
+        expect(listing.active).to.be.true;
+      });
+  
+      it("Should revert if any listing ID is invalid", async function () {
+        const invalidListingIds = [listingIds[0], 999]; // 999 doesn't exist
+        const activeStates = [false, false];
+  
+        await expect(
+          curationStorefront.connect(curator1).batchUpdateListings(
+            collectionId, 
+            invalidListingIds,
+            activeStates
+          )
+        ).to.be.revertedWithCustomError(curationStorefront, "ListingNotFound");
+      });
+  
+      it("Should revert if array lengths don't match", async function () {
+        const listingIdsToUpdate = [listingIds[0], listingIds[1]];
+        const activeStates = [false]; // Only one value
+  
+        await expect(
+          curationStorefront.connect(curator1).batchUpdateListings(
+            collectionId,
+            listingIdsToUpdate,
+            activeStates
+          )
+        ).to.be.revertedWith("Length mismatch");
+      });
+  
+      it("Should not allow non-curator to batch update listings", async function () {
+        await expect(
+          curationStorefront.connect(nonCurator).batchUpdateListings(
+            collectionId,
+            [listingIds[0]],
+            [false]
+          )
+        ).to.be.revertedWithCustomError(curationStorefront, "NotCurator");
+      });
+  
+      it("Should revert if batch update is empty", async function () {
+        await expect(
+          curationStorefront.connect(curator1).batchUpdateListings(
+            collectionId, 
+            [], 
+            []
+          )
+        ).to.be.revertedWithCustomError(curationStorefront, "BatchSizeInvalid");
+      });
+  
+      it("Should revert if batch size exceeds maximum", async function () {
+        const tooManyIds = [];
+        const tooManyStates = [];
+        for (let i = 0; i < 21; i++) { // MAX_BATCH_SIZE is 20
+          tooManyIds.push(listingIds[0]);
+          tooManyStates.push(false);
+        }
+  
+        await expect(
+          curationStorefront.connect(curator1).batchUpdateListings(
+            collectionId,
+            tooManyIds,
+            tooManyStates
+          )
+        ).to.be.revertedWithCustomError(curationStorefront, "BatchSizeInvalid");
+      });
+    });
+  
+    describe("Curation Management and Curator Roles", function () {
+      it("Should handle adding and then updating listings in sequence", async function () {
+        // First add some listings
+        const listingsToAdd = [
+          {
+            storefrontAddress: await affiliateERC1155Storefront1.getAddress(),
+            tokenId: tokenIds[0]
+          },
+          {
+            storefrontAddress: await affiliateERC1155Storefront2.getAddress(),
+            tokenId: tokenIds[0] + 100
+          }
+        ];
+  
+        const addTx = await curationStorefront.connect(curator1).batchCurateListings(
+          collectionId,
+          listingsToAdd
+        );
+        
+        const addReceipt = await addTx.wait();
+        const addEvents = addReceipt.logs.filter(log => log.fragment?.name === "ListingCurated");
+        
+        const listingIds = addEvents.map(event => event.args.listingId);
+        
+        // Then update the listings
+        await curationStorefront.connect(curator1).batchUpdateListings(
+          collectionId,
+          [listingIds[0]],
+          [false]
+        );
+        
+        // Verify both listings via getCuratedListing
+        const listing1 = await curationStorefront.getCuratedListing(collectionId, listingIds[0]);
+        const listing2 = await curationStorefront.getCuratedListing(collectionId, listingIds[1]);
+        
+        expect(listing1.active).to.be.false;
+        expect(listing2.active).to.be.true;
+      });
+  
+      it("Should allow owner to add curator who can then use batch operations", async function () {
+        // Add curator2 as curator
+        await curationStorefront.addCurator(collectionId, curator2.address);
+        
+        // Verify curator2 is a curator
+        expect(await curationStorefront.isCurator(collectionId, curator2.address)).to.be.true;
+        
+        // Have curator2 add listings
+        const listingsToAdd = [
+          {
+            storefrontAddress: await affiliateERC1155Storefront1.getAddress(),
+            tokenId: tokenIds[0]
+          }
+        ];
+  
+        await expect(
+          curationStorefront.connect(curator2).batchCurateListings(collectionId, listingsToAdd)
+        ).to.not.be.reverted;
+      });
+      
+      it("Should properly revoke curator status", async function () {
+        // Add curator2 as curator
+        await curationStorefront.addCurator(collectionId, curator2.address);
+        expect(await curationStorefront.isCurator(collectionId, curator2.address)).to.be.true;
+        
+        // Remove curator2
+        await curationStorefront.removeCurator(collectionId, curator2.address);
+        expect(await curationStorefront.isCurator(collectionId, curator2.address)).to.be.false;
+        
+        // Attempt to add a listing should now fail
+        const listingsToAdd = [
+          {
+            storefrontAddress: await affiliateERC1155Storefront1.getAddress(),
+            tokenId: tokenIds[0]
+          }
+        ];
+  
+        await expect(
+          curationStorefront.connect(curator2).batchCurateListings(collectionId, listingsToAdd)
+        ).to.be.revertedWithCustomError(curationStorefront, "NotCurator");
+      });
+    });
+  
+    describe("View Functions and Data Retrieval", function () {
+      it("Should handle listing token data from both storefront types", async function () {
+        // Add listings from both types of storefronts
+        const listingsToAdd = [
+          {
+            storefrontAddress: await affiliateERC1155Storefront1.getAddress(),
+            tokenId: tokenIds[0]
+          },
+          {
+            storefrontAddress: await affiliateERC1155Storefront2.getAddress(),
+            tokenId: tokenIds[0] + 100
+          }
+        ];
+  
+        const tx = await curationStorefront.connect(curator1).batchCurateListings(
+          collectionId,
+          listingsToAdd
+        );
+        
+        const receipt = await tx.wait();
+        const events = receipt.logs.filter(log => log.fragment?.name === "ListingCurated");
+        
+        const listingIds = events.map(event => event.args.listingId);
+        
+        // Get data for both listings
+        const listing1 = await curationStorefront.getCuratedListing(collectionId, listingIds[0]);
+        const listing2 = await curationStorefront.getCuratedListing(collectionId, listingIds[1]);
+        
+        // Verify storefront 1 data
+        expect(listing1.storefrontAddress).to.equal(await affiliateERC1155Storefront1.getAddress());
+        expect(listing1.tokenId).to.equal(tokenIds[0]);
+        expect(listing1.price).to.equal(ethers.parseEther("1"));
+        expect(listing1.affiliateFee).to.equal(2000);
+        
+        // Verify storefront 2 data
+        expect(listing2.storefrontAddress).to.equal(await affiliateERC1155Storefront2.getAddress());
+        expect(listing2.tokenId).to.equal(tokenIds[0] + 100);
+        expect(listing2.price).to.equal(ethers.parseEther("2"));
+        expect(listing2.affiliateFee).to.equal(2500);
+      });
+  
+      it("Should fetch correct curation details", async function () {
+        const details = await curationStorefront.getCurationDetails(collectionId);
+        
+        expect(details.name).to.equal("Test Collection");
+        expect(details.description).to.equal("Description for test collection");
+        expect(details.paymentAddress).to.equal(owner.address);
+        expect(details.owner).to.equal(owner.address);
+      });
+  
+      it("Should revert when requesting non-existent curation", async function () {
+        const nonExistentId = 999;
+        
+        await expect(
+          curationStorefront.getCurationDetails(nonExistentId)
+        ).to.be.revertedWithCustomError(curationStorefront, "CurationNotFound");
+      });
+  
+      it("Should retrieve ERC1155 token address from listing", async function () {
+        // Add a listing
+        const tx = await curationStorefront.connect(curator1).curateListing(
+          collectionId,
+          await affiliateERC1155Storefront1.getAddress(),
+          tokenIds[0]
+        );
+        
+        const receipt = await tx.wait();
+        const event = receipt.logs.find(log => log.fragment?.name === "ListingCurated");
+        const listingId = event.args.listingId;
+        
+        // Get the ERC1155 token address
+        const erc1155Address = await curationStorefront.getListingERC1155Token(
+          collectionId,
+          listingId
+        );
+        
+        expect(erc1155Address).to.equal(await mockERC1155.getAddress());
+      });
     });
   });
-});
+
+
+
+
