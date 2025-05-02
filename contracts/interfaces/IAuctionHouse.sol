@@ -12,7 +12,7 @@ interface IAuctionHouse {
     struct Auction {
         uint256 tokenId;
         address tokenContract;
-        uint256 amount;
+        uint256 highestBid;
         uint256 duration;
         uint256 startTime;
         uint256 reservePrice;
@@ -27,6 +27,7 @@ interface IAuctionHouse {
         bool isPremiumAuction;
         uint16 premiumBps;
         uint256 timeExtension;
+        uint256 paymentAmount;
     }
 
     event AuctionCreated(
@@ -70,7 +71,8 @@ interface IAuctionHouse {
     function createBid(
         uint256 _auctionId,
         address _affiliate,
-        EncryptedMessage calldata _encryptedMsg
+        EncryptedMessage calldata _encryptedMsg,
+        uint256 _bidAmount
     ) external payable;
     
     function endAuction(uint256 _auctionId) external;

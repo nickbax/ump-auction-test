@@ -1,8 +1,8 @@
 {
   "contractName": "AffiliateVerifier",
-  "address": "0x3fDf5547a82739a69F37F837da4C399aC796e0b8",
+  "address": "0x46Eeb991AAFE6ec4c22e9919b692A02397130584",
   "constructorArguments": [],
-  "deploymentTime": "2025-03-05T18:48:58.940Z",
+  "deploymentTime": "2025-04-11T11:47:07.782Z",
   "network": "basemainnet",
   "chainId": 8453,
   "abi": [

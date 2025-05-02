@@ -1,3 +1,10 @@
 {
-  "curationStorefront": "0xdFCA83ff7544Acb88B5D04A9101d58780243E0cb"
+  "affiliateVerifierImplementation": "0x46Eeb991AAFE6ec4c22e9919b692A02397130584",
+  "affiliateVerifierProxy": "0x6b127f444Fde9a8E65E5A33E1fB1845066ee1266",
+  "affiliateEscrowFactory": "0xA4062c63c47aF497a7daC93b96205E8b145A0cd1",
+  "affiliateEscrowImplementation": "0x1fda64E229055957853ea30a99f02498226EAa65",
+  "receiptERC1155Factory": "0x997fc6dcBf71dc6291D85292e458a92e934fd06c",
+  "receiptERC1155": "0xEC24F45030f70033B86FD757FB5B116fA447Dc63",
+  "affiliateERC1155StorefrontFactory": "0xd0dE2B250F0b65C66F318797083558Ac9eACE836",
+  "affiliateERC1155Storefront": "0xeEDB35Ebe143283b448FA82861430251a556ee8c"
 }

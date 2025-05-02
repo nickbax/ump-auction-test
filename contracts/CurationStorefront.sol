@@ -35,7 +35,7 @@ interface IAffiliateStorefront {
 }
 
 contract CurationStorefront is ERC721URIStorage, Ownable {
-    string public constant VERSION = "0.0.2";
+    string public constant VERSION = "0.0.3";
     uint8 public constant MAX_BATCH_SIZE = 20; //TODO: Figure out optimal max size
 
     struct CuratedListing {

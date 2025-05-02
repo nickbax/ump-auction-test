@@ -1,24 +1,18 @@
 {
-  "contractName": "AffiliateERC1155StorefrontFactory",
-  "address": "0xd0dE2B250F0b65C66F318797083558Ac9eACE836",
+  "contractName": "AuctionHouseFactory",
+  "address": "0x991cEf5027997d248dAA544FC2434E45Dd98A199",
   "constructorArguments": [
-    "0x0000000000000068F116a894984e2DB1123eB395",
-    604800
+    "0x2a919d846355d0F1794078310be4d5F8E3000cBd"
   ],
-  "deploymentTime": "2025-04-11T11:47:07.785Z",
+  "deploymentTime": "2025-04-24T23:30:35.870Z",
   "network": "basemainnet",
   "chainId": 8453,
   "abi": [
     {
       "inputs": [
         {
-          "internalType": "address",
-          "name": "_seaport",
-          "type": "address"
-        },
-        {
           "internalType": "uint256",
-          "name": "_minSettleTime",
+          "name": "_defaultSettlementDeadline",
           "type": "uint256"
         }
       ],
@@ -31,7 +25,7 @@
         {
           "indexed": true,
           "internalType": "address",
-          "name": "storefront",
+          "name": "auctionHouse",
           "type": "address"
         },
         {
@@ -42,21 +36,27 @@
         },
         {
           "indexed": false,
-          "internalType": "address",
-          "name": "erc1155Token",
-          "type": "address"
+          "internalType": "string",
+          "name": "name",
+          "type": "string"
         },
         {
           "indexed": false,
-          "internalType": "address",
-          "name": "escrowFactory",
-          "type": "address"
+          "internalType": "string",
+          "name": "image",
+          "type": "string"
         },
         {
           "indexed": false,
-          "internalType": "address",
-          "name": "affiliateVerifier",
-          "type": "address"
+          "internalType": "string",
+          "name": "description",
+          "type": "string"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "settlementDeadline",
+          "type": "uint256"
         },
         {
           "indexed": false,
@@ -65,30 +65,17 @@
           "type": "string"
         }
       ],
-      "name": "StorefrontCreated",
+      "name": "AuctionHouseCreated",
       "type": "event"
     },
     {
       "inputs": [],
-      "name": "MIN_SETTLE_TIME",
+      "name": "DEFAULT_SETTLEMENT_DEADLINE",
       "outputs": [
         {
           "internalType": "uint256",
           "name": "",
           "type": "uint256"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "SEAPORT",
-      "outputs": [
-        {
-          "internalType": "address",
-          "name": "",
-          "type": "address"
         }
       ],
       "stateMutability": "view",
@@ -110,32 +97,27 @@
     {
       "inputs": [
         {
-          "internalType": "address",
-          "name": "designatedArbiter",
-          "type": "address"
+          "internalType": "string",
+          "name": "name",
+          "type": "string"
         },
         {
-          "internalType": "address",
-          "name": "erc1155Token",
-          "type": "address"
+          "internalType": "string",
+          "name": "image",
+          "type": "string"
         },
         {
-          "internalType": "address",
-          "name": "escrowFactory",
-          "type": "address"
-        },
-        {
-          "internalType": "address",
-          "name": "affiliateVerifier",
-          "type": "address"
+          "internalType": "string",
+          "name": "description",
+          "type": "string"
         },
         {
           "internalType": "uint256",
-          "name": "initialSettleDeadline",
+          "name": "customSettlementDeadline",
           "type": "uint256"
         }
       ],
-      "name": "createStorefront",
+      "name": "createAuctionHouse",
       "outputs": [
         {
           "internalType": "address",

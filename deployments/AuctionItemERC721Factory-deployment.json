@@ -1,8 +1,8 @@
 {
-  "contractName": "ReceiptERC1155Factory",
-  "address": "0x997fc6dcBf71dc6291D85292e458a92e934fd06c",
+  "contractName": "AuctionItemERC721Factory",
+  "address": "0x7A2062cd0f7AA74C1071528E5fC457AC2dD58bFe",
   "constructorArguments": [],
-  "deploymentTime": "2025-04-11T11:47:07.784Z",
+  "deploymentTime": "2025-04-24T23:30:35.869Z",
   "network": "basemainnet",
   "chainId": 8453,
   "abi": [
@@ -39,6 +39,25 @@
         {
           "indexed": true,
           "internalType": "address",
+          "name": "tokenAddress",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "owner",
+          "type": "address"
+        }
+      ],
+      "name": "AuctionItemERC721Created",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
           "name": "previousOwner",
           "type": "address"
         },
@@ -53,33 +72,24 @@
       "type": "event"
     },
     {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "tokenAddress",
-          "type": "address"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "owner",
-          "type": "address"
-        }
-      ],
-      "name": "ReceiptERC1155Created",
-      "type": "event"
-    },
-    {
       "inputs": [
         {
           "internalType": "string",
-          "name": "uri",
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "internalType": "string",
+          "name": "symbol",
+          "type": "string"
+        },
+        {
+          "internalType": "string",
+          "name": "contractURI",
           "type": "string"
         }
       ],
-      "name": "createReceiptERC1155",
+      "name": "createAuctionItemERC721",
       "outputs": [
         {
           "internalType": "address",

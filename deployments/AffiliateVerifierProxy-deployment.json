@@ -1,11 +1,11 @@
 {
   "contractName": "AffiliateVerifierProxy",
-  "address": "0x1D1D4681E5146A66A9ff6917Ef068af5254617F6",
+  "address": "0x6b127f444Fde9a8E65E5A33E1fB1845066ee1266",
   "constructorArguments": [
-    "0x3fDf5547a82739a69F37F837da4C399aC796e0b8",
+    "0x46Eeb991AAFE6ec4c22e9919b692A02397130584",
     "0x8129fc1c"
   ],
-  "deploymentTime": "2025-03-05T18:48:58.941Z",
+  "deploymentTime": "2025-04-11T11:47:07.782Z",
   "network": "basemainnet",
   "chainId": 8453,
   "abi": [

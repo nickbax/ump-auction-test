@@ -1,8 +1,8 @@
 {
   "contractName": "AffiliateEscrowFactory",
-  "address": "0xE07c41Bc76A8B56ad7E996cF60A3dDeD96ca575D",
+  "address": "0x2a919d846355d0F1794078310be4d5F8E3000cBd",
   "constructorArguments": [],
-  "deploymentTime": "2025-03-05T18:48:58.941Z",
+  "deploymentTime": "2025-04-24T23:30:35.867Z",
   "network": "basemainnet",
   "chainId": 8453,
   "abi": [

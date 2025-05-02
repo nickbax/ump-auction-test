@@ -1,0 +1,8 @@
+{
+  "affiliateEscrowFactory": "0x2a919d846355d0F1794078310be4d5F8E3000cBd",
+  "affiliateEscrowImplementation": "0x570f2ae7BF56E1c471D2031E7356Afa3D314d0c3",
+  "auctionItemERC721Factory": "0x7A2062cd0f7AA74C1071528E5fC457AC2dD58bFe",
+  "auctionItemERC721": "0x7A4317B20354B8f1ac29AFa0A1dA4129d5309FaC",
+  "auctionHouseFactory": "0x991cEf5027997d248dAA544FC2434E45Dd98A199",
+  "auctionHouse": "0x8519fFC41123a3Fee57294813b171D2717938c3E"
+}
