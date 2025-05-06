@@ -4,7 +4,17 @@ pragma solidity ^0.8.27;
 import "./AuctionHouse.sol";
 
 contract AuctionHouseFactory {
-    event AuctionHouseCreated(address indexed auctionHouse, address indexed owner);
+    // Updated event with more metadata
+    event AuctionHouseCreated(
+        address indexed auctionHouse, 
+        address indexed owner,
+        string name,
+        string image,
+        string description,
+        string contractURI,
+        string symbol,
+        uint256 settlementDeadline
+    );
     
     constructor() {}
     
@@ -32,7 +42,17 @@ contract AuctionHouseFactory {
         // Transfer ownership to the caller
         newAuctionHouse.transferOwnership(msg.sender);
         
-        emit AuctionHouseCreated(address(newAuctionHouse), msg.sender);
+        // Emit event with all metadata
+        emit AuctionHouseCreated(
+            address(newAuctionHouse), 
+            msg.sender,
+            _name,
+            _image,
+            _description,
+            _contractURI,
+            _symbol,
+            _customDeadline
+        );
         
         return address(newAuctionHouse);
     }
