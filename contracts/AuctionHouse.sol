@@ -38,6 +38,9 @@ error CannotRescueToZeroAddress();
 error CannotRescueWhileAuctionsActive();
 error InsufficientBalance();
 error TokenInActiveAuction();
+error BidsAlreadyPlaced();
+error BidTooLow();
+error ReservePriceTooLow();
 
 // Encrypted Message Struct
 struct EncryptedMessage {
@@ -55,7 +58,7 @@ struct Auction {
     uint256 tokenId;
     address tokenContract;
     uint256 highestBid;
-    uint256 duration;
+    uint256 endTime;
     uint256 startTime;
     uint256 reservePrice;
     uint16 affiliateFee;
@@ -82,9 +85,8 @@ contract AuctionHouse is IAuctionHouse, ReentrancyGuard, IERC721Receiver, Ownabl
     /// @notice A text description for this auction house.
     string public description;
 
-
     /// @notice Versioning info
-    string public constant VERSION = "0.0.4";
+    string public constant VERSION = "0.0.5";
     
     /// @notice Settlement deadline in seconds after auction end
     uint256 public settlementDeadline = 21 days; // Default to 21 days
@@ -98,17 +100,22 @@ contract AuctionHouse is IAuctionHouse, ReentrancyGuard, IERC721Receiver, Ownabl
     mapping(uint256 => EncryptedMessage) public auctionEncryptedMessages;
     mapping(address => mapping(uint256 => uint256)) public tokenToAuctionId; // Maps token contract + tokenId to auctionId
     
-    AuctionItemERC721Factory public immutable auctionItemFactory;
-    
-    // Mapping to track NFT contracts created by this auction house
-    mapping(string => address) public nftContracts;
+    AuctionItemERC721 public auctionItemContract;
     
     AffiliateEscrowFactory public escrowFactory;
+    
+    // Counter for active auctions 
+    uint256 public activeAuctionsCount;
+    
+    // Default address for the auction item factory
+    address public auctionItemFactoryAddress;
     
     constructor(
         string memory _name,
         string memory _image,
         string memory _description,
+        string memory _contractURI,
+        string memory _symbol,
         uint256 _customDeadline,
         address _auctionItemFactory,
         address _escrowFactory
@@ -123,8 +130,25 @@ contract AuctionHouse is IAuctionHouse, ReentrancyGuard, IERC721Receiver, Ownabl
             settlementDeadline = 21 days;
         }
         
-        auctionItemFactory = AuctionItemERC721Factory(_auctionItemFactory);
+        // Store the factory address
+        auctionItemFactoryAddress = _auctionItemFactory;
+        
+        // Create the AuctionItem contract directly
+        AuctionItemERC721Factory factory = AuctionItemERC721Factory(_auctionItemFactory);
+        auctionItemContract = AuctionItemERC721(factory.createAuctionItemERC721(
+            string.concat(_name, " Items"),
+            _symbol,
+            _contractURI
+        ));
+        
         escrowFactory = AffiliateEscrowFactory(_escrowFactory);
+        
+        emit AuctionHouseMetadataUpdated(
+            address(this),
+            _name,
+            _image,
+            _description
+        );
     }
     
     /**
@@ -139,21 +163,17 @@ contract AuctionHouse is IAuctionHouse, ReentrancyGuard, IERC721Receiver, Ownabl
         string memory _symbol,
         string memory _contractURI
     ) public onlyOwner returns (address) {
-        // Create a new NFT contract using the factory
-        address nftContract = auctionItemFactory.createAuctionItemERC721(
+        // Create a new NFT contract using the stored factory address
+        AuctionItemERC721Factory factory = AuctionItemERC721Factory(auctionItemFactoryAddress);
+        address nftContract = factory.createAuctionItemERC721(
             _name,
             _symbol,
             _contractURI
         );
         
-        // Store the contract address
-        nftContracts[_symbol] = nftContract;
-        
-        // The factory already transfers ownership to the caller (this contract)
         return nftContract;
     }
-    
-    
+
     // Define the NFT metadata struct
     struct NFTMetadata {
         string name;
@@ -224,6 +244,20 @@ contract AuctionHouse is IAuctionHouse, ReentrancyGuard, IERC721Receiver, Ownabl
     /// @notice Emitted when the settlement deadline is updated
     event SettlementDeadlineUpdated(uint256 newDeadline);
 
+    /// @notice Emitted when a bid is created
+    event BidCreated(
+        uint256 indexed auctionId,
+        address indexed auctionAddress,
+        address indexed bidder,
+        uint256 bidAmount,
+        address affiliate,
+        bytes encryptedData,
+        bytes ephemeralPublicKey,
+        bytes iv,
+        bytes verificationHash,
+        bool isFinal
+    );
+
     /**
      * @notice Creates a new auction
      */
@@ -242,6 +276,11 @@ contract AuctionHouse is IAuctionHouse, ReentrancyGuard, IERC721Receiver, Ownabl
         uint16 _minBidIncrementBps,
         uint256 _timeExtension
     ) public nonReentrant returns (uint256) {
+        // Ensure reserve price is at least 1 wei
+        if (_reservePrice < 1) {
+            revert ReservePriceTooLow();
+        }
+        
         // Check if token is already being auctioned
         if (tokenToAuctionId[_tokenContract][_tokenId] != 0) {
             revert("Token already in auction");
@@ -260,25 +299,28 @@ contract AuctionHouse is IAuctionHouse, ReentrancyGuard, IERC721Receiver, Ownabl
         // Validate start time is in the future
         require(_startTime > block.timestamp, "Start time must be in the future");
         
-        // Generate auction ID and increment by 1
+        // Generate auction ID
         uint256 auctionId = nextAuctionId++;
         
-        // Calculate initial amount to be reservePrice - minBidIncrement
+        // Calculate initial bid amount
         // This ensures first bid must be at least reservePrice
         uint256 initialBid = 0;
-        if (_reservePrice > 0) {
-            uint256 minIncrement = (_reservePrice * _minBidIncrementBps) / 10000; 
-            if (minIncrement < _reservePrice) {
-                initialBid = _reservePrice - minIncrement;
-            }
+        uint256 minIncrement = (_reservePrice * _minBidIncrementBps) / 10000;
+        
+        if (minIncrement < _reservePrice) {
+            initialBid = _reservePrice - minIncrement;
+        } else {
+            // If minIncrement is >= reservePrice, set initialBid to 0
+            // This ensures first bid must be at least reservePrice
+            initialBid = 0;
         }
         
-        // Create a new auction
+        // Create auction with calculated initialBid
         auctions[auctionId] = Auction({
             tokenId: _tokenId,
             tokenContract: _tokenContract,
-            highestBid: initialBid,
-            duration: _duration,
+            highestBid: initialBid, // Set initial bid amount
+            endTime: _startTime + _duration,
             startTime: _startTime,
             reservePrice: _reservePrice,
             affiliateFee: _affiliateFee,
@@ -322,6 +364,9 @@ contract AuctionHouse is IAuctionHouse, ReentrancyGuard, IERC721Receiver, Ownabl
             _isPremiumAuction
         );
         
+        // Increment active auctions counter
+        activeAuctionsCount++;
+        
         return auctionId;
     }
 
@@ -329,8 +374,7 @@ contract AuctionHouse is IAuctionHouse, ReentrancyGuard, IERC721Receiver, Ownabl
      * @notice Mints a new NFT and creates an auction for it
      */
     function createAuctionWithNewNFT(
-        address _nftContract,
-        NFTMetadata memory _metadata,
+        NFTMetadata calldata _metadata,
         uint256 _startTime,
         uint256 _reservePrice,
         uint256 _duration,
@@ -342,10 +386,9 @@ contract AuctionHouse is IAuctionHouse, ReentrancyGuard, IERC721Receiver, Ownabl
         uint16 _premiumRateBps,
         uint16 _minBidIncrementBps,
         uint256 _timeExtension
-    ) public returns (uint256) {
+    ) external returns (uint256) {
         // Mint the NFT directly to this contract
-        AuctionItemERC721 nft = AuctionItemERC721(_nftContract);
-        uint256 tokenId = nft.mintWithMetadata(
+        uint256 tokenId = auctionItemContract.mintWithMetadata(
             address(this),
             _metadata.name,
             _metadata.description,
@@ -356,7 +399,7 @@ contract AuctionHouse is IAuctionHouse, ReentrancyGuard, IERC721Receiver, Ownabl
         
         // Create the auction
         return createAuction(
-            _nftContract,
+            address(auctionItemContract),
             tokenId,
             _startTime,
             _reservePrice,
@@ -394,19 +437,16 @@ contract AuctionHouse is IAuctionHouse, ReentrancyGuard, IERC721Receiver, Ownabl
         }
         
         // Check if auction has ended
-        if (block.timestamp >= auction.startTime + auction.duration) {
+        if (block.timestamp >= auction.endTime) {
             revert AuctionExpired();
         }
         
-        // Check if bid meets reserve price
-        if (_bidAmount < auction.reservePrice) {
-            revert BidBelowReservePrice();
-        }
+        // Get minimum bid required using the getMinimumBid function
+        uint256 minBidRequired = this.getMinimumBid(_auctionId);
         
-        // Check if bid increment is sufficient
-        uint256 minBidRequired = auction.highestBid + ((auction.highestBid * auction.minBidIncrementBps) / 10000);
+        // Check if bid meets minimum requirement
         if (_bidAmount < minBidRequired) {
-            revert BidIncrementTooLow();
+            revert BidTooLow();
         }
         
         // Check if this is a native ETH auction or ERC20 auction
@@ -461,6 +501,10 @@ contract AuctionHouse is IAuctionHouse, ReentrancyGuard, IERC721Receiver, Ownabl
                     prevBidAmount,
                     premium
                 );
+                
+                // Calculate the payment amount (what will go to escrow)
+                // This is the bid amount minus any premiums that have been paid
+                auction.paymentAmount = bidAmount - premium;
             } else {
                 // Standard refund without premium
                 _refundBidder(
@@ -469,55 +513,94 @@ contract AuctionHouse is IAuctionHouse, ReentrancyGuard, IERC721Receiver, Ownabl
                     previousBidder,
                     prevBidAmount
                 );
+                
+                // No premium, so payment amount is the full bid amount
+                auction.paymentAmount = bidAmount;
+            }
+        } else {
+            // First bid, so payment amount is the full bid amount
+            auction.paymentAmount = bidAmount;
+        }
+        
+        // Update auction with new highest bid
+        auction.highestBid = bidAmount;
+        auction.bidder = payable(msg.sender);
+        auction.affiliate = _affiliate;
+        
+        // Store only the most recent encrypted message
+        auctionEncryptedMessages[_auctionId] = _encryptedMsg;
+        
+        // Extend auction if bid is placed near the end
+        if (auction.timeExtension > 0) {
+            uint256 timeRemaining = auction.endTime - block.timestamp;
+            if (timeRemaining < auction.timeExtension) {
+                auction.endTime = block.timestamp + auction.timeExtension;
+                emit AuctionExtended(_auctionId, address(this), auction.endTime);
             }
         }
         
-        // Calculate the payment amount (what will go to escrow)
-        // This is the bid amount minus any premiums that have been paid
-        auction.paymentAmount = bidAmount;
-        
-        // Update auction state
-        auction.highestBid = bidAmount;
-        auction.bidder = payable(msg.sender);
-        
-        // Update affiliate if provided
-        if (_affiliate != address(0)) {
-            auction.affiliate = _affiliate;
-        }
-        
-        // Store encrypted message if provided
-        if (_encryptedMsg.encryptedData.length > 0) {
-            auctionEncryptedMessages[_auctionId] = _encryptedMsg;
-            _emitEncryptedMessageEvent(_auctionId, msg.sender, _encryptedMsg, false);
-        }
-        
-        // Check if we need to extend the auction
-        uint256 timeRemaining = (auction.startTime + auction.duration) - block.timestamp;
-        if (timeRemaining < auction.timeExtension) {
-            // Extend the auction by the time extension amount
-            auction.duration += auction.timeExtension;
-            
-            // Emit auction extended event
-            emit AuctionExtended(
-                _auctionId,
-                address(this),
-                auction.startTime + auction.duration
-            );
-        }
-        
-        // Emit bid event
-        emit AuctionBid(
+        // Emit bid created event
+        emit BidCreated(
             _auctionId,
             address(this),
             msg.sender,
-            auction.affiliate,
             bidAmount,
-            auction.bidder == payable(msg.sender) // firstBid flag
+            _affiliate,
+            _encryptedMsg.encryptedData,
+            _encryptedMsg.ephemeralPublicKey,
+            _encryptedMsg.iv,
+            _encryptedMsg.verificationHash,
+            false // Not final message
+        );
+        
+        // Also emit the encrypted message event
+        emit AuctionEncryptedMessage(
+            _auctionId,
+            address(this),
+            msg.sender,
+            _encryptedMsg.encryptedData,
+            _encryptedMsg.ephemeralPublicKey,
+            _encryptedMsg.iv,
+            _encryptedMsg.verificationHash,
+            false // Not final message
+        );
+    }
+
+    /**
+     * @notice Returns all data for an auction
+     * @param _auctionId The ID of the auction
+     * @return Complete auction data
+     */
+    function getAuctionData(uint256 _auctionId) external view returns (Auction memory) {
+        if (!auctionExists[_auctionId]) {
+            revert AuctionNotFound();
+        }
+        
+        return auctions[_auctionId];
+    }
+
+    /**
+     * @notice Checks if an auction is active
+     * @param _auctionId The ID of the auction
+     * @return bool True if the auction is active, false otherwise
+     */
+    function isAuctionActive(uint256 _auctionId) public view returns (bool) {
+        if (!auctionExists[_auctionId]) {
+            return false;
+        }
+        
+        Auction storage auction = auctions[_auctionId];
+        
+        // Auction is active if it has started but not ended
+        return (
+            block.timestamp >= auction.startTime && 
+            block.timestamp < auction.endTime
         );
     }
 
     /**
      * @notice End an auction, finalizing the sale and forwarding funds to escrow.
+     * @param _auctionId The ID of the auction to end
      */
     function endAuction(uint256 _auctionId) external nonReentrant {
         // Verify auction exists
@@ -527,7 +610,8 @@ contract AuctionHouse is IAuctionHouse, ReentrancyGuard, IERC721Receiver, Ownabl
         
         Auction storage auction = auctions[_auctionId];
         
-        if (block.timestamp < auction.startTime + auction.duration) {
+        // Check if auction has ended using endTime
+        if (block.timestamp < auction.endTime) {
             revert AuctionHasntCompleted();
         }
         
@@ -539,51 +623,52 @@ contract AuctionHouse is IAuctionHouse, ReentrancyGuard, IERC721Receiver, Ownabl
         // Clear token auction mapping
         tokenToAuctionId[auction.tokenContract][auction.tokenId] = 0;
 
-        // Set affiliate and payer on the escrow contract for this auction
+        // Initialize the escrow with payment information
         AffiliateEscrow escrow = AffiliateEscrow(payable(auction.escrowAddress));
+        
+        // Set the payer (winning bidder) and settlement deadline
+        escrow.setPayer(auction.bidder, settlementDeadline);
+        
+        // Set the affiliate if one was used
         if (auction.affiliate != address(0)) {
             escrow.setAffiliate(auction.affiliate, auction.affiliateFee);
         }
-        escrow.setPayer(auction.bidder, settlementDeadline);
-
+        
         // Transfer the NFT directly to the winning bidder instead of the escrow
         IERC721(auction.tokenContract).transferFrom(address(this), auction.bidder, auction.tokenId);
 
-        // Send the final bid amount to the escrow
+        // Send the payment amount to the escrow (not the highest bid)
         bool isNativeAuction = auction.auctionCurrency == address(0);
         
         if (isNativeAuction) {
-            // For native ETH, use the actual contract balance
-            uint256 contractBalance = address(this).balance;
-            
-            (bool success, ) = auction.escrowAddress.call{value: contractBalance}("");
+            // For native ETH, send the payment amount for this auction
+            (bool success, ) = auction.escrowAddress.call{value: auction.paymentAmount}("");
             if (!success) {
                 revert TransferFailed();
             }
         } else {
-            // ERC20 auction
+            // For ERC20 auction, send the payment amount for this auction
             IERC20 token = IERC20(auction.auctionCurrency);
-            uint256 tokenBalance = token.balanceOf(address(this));
-            
-            bool success = token.transfer(auction.escrowAddress, tokenBalance);
+            bool success = token.transfer(auction.escrowAddress, auction.paymentAmount);
             if (!success) {
                 revert TokenTransferFailed();
             }
         }
+
+        // Calculate affiliate share for the event
+        uint256 affiliateShare = (auction.paymentAmount * auction.affiliateFee) / 10000;
 
         emit AuctionEnded(
             _auctionId,
             address(this),
             auction.bidder,
             auction.affiliate,
-            auction.highestBid,
-            0 // affiliate payout, if you want to track it
+            auction.paymentAmount,
+            affiliateShare
         );
         
-        // Remove auction from existence to free up storage
-        delete auctions[_auctionId];
-        delete auctionEncryptedMessages[_auctionId];
-        delete auctionExists[_auctionId];
+        // Decrement active auctions counter
+        activeAuctionsCount--;
     }
 
     /**
@@ -598,10 +683,14 @@ contract AuctionHouse is IAuctionHouse, ReentrancyGuard, IERC721Receiver, Ownabl
         Auction storage auction = auctions[_auctionId];
         
         // Only the auction owner can cancel
-        require(msg.sender == auction.auctionOwner, "Not auction owner");
+        if (msg.sender != auction.auctionOwner) {
+            revert NotAuctionOwner();
+        }
         
         // Can only cancel if no bids have been placed
-        require(auction.bidder == address(0), "Bids already placed");
+        if (auction.bidder != address(0)) {
+            revert BidsAlreadyPlaced();
+        }
         
         // Clear token auction mapping
         tokenToAuctionId[auction.tokenContract][auction.tokenId] = 0;
@@ -612,10 +701,11 @@ contract AuctionHouse is IAuctionHouse, ReentrancyGuard, IERC721Receiver, Ownabl
         // Emit auction cancelled event
         emit AuctionCancelled(_auctionId, address(this), auction.auctionOwner);
         
-        // Remove auction from existence to free up storage
-        delete auctions[_auctionId];
-        delete auctionEncryptedMessages[_auctionId];
-        delete auctionExists[_auctionId];
+        // Mark auction as cancelled by setting endTime to 0
+        auction.endTime = 0;
+        
+        // Decrement active auctions counter
+        activeAuctionsCount--;
     }
 
     /**
@@ -636,7 +726,7 @@ contract AuctionHouse is IAuctionHouse, ReentrancyGuard, IERC721Receiver, Ownabl
         Auction storage auction = auctions[_auctionId];
         
         // Check if auction is still active 
-        if (block.timestamp < auction.startTime + auction.duration) {
+        if (block.timestamp < auction.startTime + auction.endTime) {
             revert AuctionStillActive();
         }
         
@@ -703,23 +793,7 @@ contract AuctionHouse is IAuctionHouse, ReentrancyGuard, IERC721Receiver, Ownabl
      * @return bool True if no active auctions exist, false otherwise
      */
     function noActiveAuctions() public view returns (bool) {
-        // Start from auction ID 1 (since we start nextAuctionId at 1)
-        for (uint256 i = 1; i < nextAuctionId; i++) {
-            // Skip if this auction doesn't exist (might have been ended or cancelled)
-            if (!auctionExists[i]) {
-                continue;
-            }
-            
-            Auction storage auction = auctions[i];
-            
-            // Check if auction is active (has started but not ended)
-            if (block.timestamp >= auction.startTime && 
-                block.timestamp < auction.startTime + auction.duration) {
-                return false;
-            }
-        }
-        
-        return true;
+        return activeAuctionsCount == 0;
     }
 
     /**
@@ -874,11 +948,41 @@ contract AuctionHouse is IAuctionHouse, ReentrancyGuard, IERC721Receiver, Ownabl
         return minBidRequired;
     }
 
-
-
     event AuctionCancelled(
         uint256 indexed auctionId,
         address indexed auctionHouse,
         address indexed owner
     );
+
+    
+    // Batch function to end expired auctions
+    function batchEndExpiredAuctions(uint256[] calldata _auctionIds) external {
+        for (uint256 i = 0; i < _auctionIds.length; i++) {
+            uint256 auctionId = _auctionIds[i];
+            
+            // Skip if auction doesn't exist
+            if (!auctionExists[auctionId]) {
+                continue;
+            }
+            
+            Auction storage auction = auctions[auctionId];
+            
+            // Skip if auction hasn't ended yet
+            if (block.timestamp < auction.endTime) {
+                continue;
+            }
+            
+            // Skip if no bids were placed
+            if (auction.bidder == address(0)) {
+                continue;
+            }
+            
+            // End the auction
+            try this.endAuction(auctionId) {
+                // Auction ended successfully
+            } catch {
+                // Auction couldn't be ended, continue to the next one
+            }
+        }
+    }
 }

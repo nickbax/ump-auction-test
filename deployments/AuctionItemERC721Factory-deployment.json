@@ -1,8 +1,8 @@
 {
   "contractName": "AuctionItemERC721Factory",
-  "address": "0x7A2062cd0f7AA74C1071528E5fC457AC2dD58bFe",
+  "address": "0xC6d383429967Ed49cAf224bbD6c7A7F4317C0a15",
   "constructorArguments": [],
-  "deploymentTime": "2025-04-24T23:30:35.869Z",
+  "deploymentTime": "2025-05-05T19:41:07.275Z",
   "network": "basemainnet",
   "chainId": 8453,
   "abi": [
@@ -39,7 +39,7 @@
         {
           "indexed": true,
           "internalType": "address",
-          "name": "tokenAddress",
+          "name": "tokenContract",
           "type": "address"
         },
         {

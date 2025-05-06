@@ -5,6 +5,7 @@ import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/utils/Base64.sol";
+import "@openzeppelin/contracts/interfaces/IERC4906.sol";
 
 // Custom errors
 error NotTokenOwnerOrApproved();
@@ -17,7 +18,11 @@ error InvalidRoyaltyRecipient();
 error InvalidMetadata();
 error MintingDisabled();
 
-contract AuctionItemERC721 is ERC721URIStorage, Ownable {
+/**
+ * @title AuctionItemERC721
+ * @dev ERC721 token for auction items with UMP-compatible metadata
+ */
+contract AuctionItemERC721 is IERC4906, ERC721URIStorage, Ownable {
     using Strings for uint256;
 
     struct TokenMetadata {
@@ -32,6 +37,10 @@ contract AuctionItemERC721 is ERC721URIStorage, Ownable {
     string private _contractURI;
     uint256 private _nextTokenId;
 
+    // Base URI for metadata
+    string private _baseTokenURI;
+
+    // Events for OpenSea compatibility
     event ContractURIUpdated(string newURI);
     event OwnershipChanged(address indexed previousOwner, address indexed newOwner);
 
@@ -139,16 +148,32 @@ contract AuctionItemERC721 is ERC721URIStorage, Ownable {
 
     function setContractURI(string memory newURI) public onlyOwner {
         _contractURI = newURI;
-        emit ContractURIUpdated(newURI);
     }
 
     function changeOwnership(address newOwner) public onlyOwner {
         address oldOwner = owner();
         _transferOwnership(newOwner);
-        emit OwnershipChanged(oldOwner, newOwner);
     }
     
     function _exists(uint256 tokenId) internal view returns (bool) {
         return _ownerOf(tokenId) != address(0);
+    }
+
+    /**
+     * @dev Sets the base URI for token metadata
+     * @param baseURI New base URI
+     */
+    function setBaseURI(string memory baseURI) external onlyOwner {
+        _baseTokenURI = baseURI;
+        
+        // Emit batch update for all tokens
+        emit BatchMetadataUpdate(0, type(uint256).max);
+    }
+    
+    /**
+     * @dev Returns the base URI for token metadata
+     */
+    function _baseURI() internal view override returns (string memory) {
+        return _baseTokenURI;
     }
 }

@@ -1,13 +1,17 @@
 {
   "contractName": "AuctionHouse",
-  "address": "0x8519fFC41123a3Fee57294813b171D2717938c3E",
+  "address": "0xEEBd856800C5e468AaFFBCd5fDA44C198e30DC9a",
   "constructorArguments": [
-    "Test Auction House",
+    "Main Auction House",
     "https://example.com/auction-house-image.png",
-    "A test auction house for NFTs",
-    2592000
+    "The primary auction house for NFT sales",
+    "https://example.com/auction-house-metadata",
+    "AH",
+    1814400,
+    "0xC6d383429967Ed49cAf224bbD6c7A7F4317C0a15",
+    "0xE07c41Bc76A8B56ad7E996cF60A3dDeD96ca575D"
   ],
-  "deploymentTime": "2025-04-24T23:30:35.870Z",
+  "deploymentTime": "2025-05-05T19:41:18.759Z",
   "network": "basemainnet",
   "chainId": 8453,
   "abi": [
@@ -29,14 +33,29 @@
           "type": "string"
         },
         {
-          "internalType": "address",
-          "name": "_owner",
-          "type": "address"
+          "internalType": "string",
+          "name": "_contractURI",
+          "type": "string"
+        },
+        {
+          "internalType": "string",
+          "name": "_symbol",
+          "type": "string"
         },
         {
           "internalType": "uint256",
-          "name": "_settlementDeadline",
+          "name": "_customDeadline",
           "type": "uint256"
+        },
+        {
+          "internalType": "address",
+          "name": "_auctionItemFactory",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "_escrowFactory",
+          "type": "address"
         }
       ],
       "stateMutability": "nonpayable",
@@ -45,11 +64,6 @@
     {
       "inputs": [],
       "name": "AuctionExpired",
-      "type": "error"
-    },
-    {
-      "inputs": [],
-      "name": "AuctionHasBid",
       "type": "error"
     },
     {
@@ -74,12 +88,12 @@
     },
     {
       "inputs": [],
-      "name": "BidBelowReservePrice",
+      "name": "BidTooLow",
       "type": "error"
     },
     {
       "inputs": [],
-      "name": "BidIncrementTooLow",
+      "name": "BidsAlreadyPlaced",
       "type": "error"
     },
     {
@@ -128,8 +142,35 @@
       "type": "error"
     },
     {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "owner",
+          "type": "address"
+        }
+      ],
+      "name": "OwnableInvalidOwner",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "account",
+          "type": "address"
+        }
+      ],
+      "name": "OwnableUnauthorizedAccount",
+      "type": "error"
+    },
+    {
       "inputs": [],
       "name": "ReentrancyGuardReentrantCall",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "ReservePriceTooLow",
       "type": "error"
     },
     {
@@ -213,6 +254,31 @@
         }
       ],
       "name": "AuctionCanceled",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "auctionId",
+          "type": "uint256"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "auctionHouse",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "owner",
+          "type": "address"
+        }
+      ],
+      "name": "AuctionCancelled",
       "type": "event"
     },
     {
@@ -447,6 +513,73 @@
       "inputs": [
         {
           "indexed": true,
+          "internalType": "uint256",
+          "name": "auctionId",
+          "type": "uint256"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "auctionAddress",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "bidder",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "bidAmount",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "address",
+          "name": "affiliate",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "bytes",
+          "name": "encryptedData",
+          "type": "bytes"
+        },
+        {
+          "indexed": false,
+          "internalType": "bytes",
+          "name": "ephemeralPublicKey",
+          "type": "bytes"
+        },
+        {
+          "indexed": false,
+          "internalType": "bytes",
+          "name": "iv",
+          "type": "bytes"
+        },
+        {
+          "indexed": false,
+          "internalType": "bytes",
+          "name": "verificationHash",
+          "type": "bytes"
+        },
+        {
+          "indexed": false,
+          "internalType": "bool",
+          "name": "isFinal",
+          "type": "bool"
+        }
+      ],
+      "name": "BidCreated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
           "internalType": "address",
           "name": "token",
           "type": "address"
@@ -509,6 +642,56 @@
         }
       ],
       "name": "ETHRescued",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "operator",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "from",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "tokenContract",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "tokenId",
+          "type": "uint256"
+        }
+      ],
+      "name": "NFTReceived",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "previousOwner",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "OwnershipTransferred",
       "type": "event"
     },
     {
@@ -581,6 +764,19 @@
       "type": "function"
     },
     {
+      "inputs": [],
+      "name": "activeAuctionsCount",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
       "inputs": [
         {
           "internalType": "uint256",
@@ -634,6 +830,32 @@
       "type": "function"
     },
     {
+      "inputs": [],
+      "name": "auctionItemContract",
+      "outputs": [
+        {
+          "internalType": "contract AuctionItemERC721",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "auctionItemFactoryAddress",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
       "inputs": [
         {
           "internalType": "uint256",
@@ -660,7 +882,7 @@
         },
         {
           "internalType": "uint256",
-          "name": "duration",
+          "name": "endTime",
           "type": "uint256"
         },
         {
@@ -735,6 +957,19 @@
         }
       ],
       "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256[]",
+          "name": "_auctionIds",
+          "type": "uint256[]"
+        }
+      ],
+      "name": "batchEndExpiredAuctions",
+      "outputs": [],
+      "stateMutability": "nonpayable",
       "type": "function"
     },
     {
@@ -832,6 +1067,107 @@
     {
       "inputs": [
         {
+          "components": [
+            {
+              "internalType": "string",
+              "name": "name",
+              "type": "string"
+            },
+            {
+              "internalType": "string",
+              "name": "description",
+              "type": "string"
+            },
+            {
+              "internalType": "string",
+              "name": "image",
+              "type": "string"
+            },
+            {
+              "internalType": "string",
+              "name": "termsOfService",
+              "type": "string"
+            },
+            {
+              "internalType": "string[]",
+              "name": "supplementalImages",
+              "type": "string[]"
+            }
+          ],
+          "internalType": "struct AuctionHouse.NFTMetadata",
+          "name": "_metadata",
+          "type": "tuple"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_startTime",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_reservePrice",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_duration",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint16",
+          "name": "_affiliateFee",
+          "type": "uint16"
+        },
+        {
+          "internalType": "address",
+          "name": "_arbiterAddress",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "_escrowFactoryAddress",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "_auctionCurrency",
+          "type": "address"
+        },
+        {
+          "internalType": "bool",
+          "name": "_isPremiumAuction",
+          "type": "bool"
+        },
+        {
+          "internalType": "uint16",
+          "name": "_premiumRateBps",
+          "type": "uint16"
+        },
+        {
+          "internalType": "uint16",
+          "name": "_minBidIncrementBps",
+          "type": "uint16"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_timeExtension",
+          "type": "uint256"
+        }
+      ],
+      "name": "createAuctionWithNewNFT",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
           "internalType": "uint256",
           "name": "_auctionId",
           "type": "uint256"
@@ -880,6 +1216,35 @@
       "type": "function"
     },
     {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "_name",
+          "type": "string"
+        },
+        {
+          "internalType": "string",
+          "name": "_symbol",
+          "type": "string"
+        },
+        {
+          "internalType": "string",
+          "name": "_contractURI",
+          "type": "string"
+        }
+      ],
+      "name": "createNFTContract",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
       "inputs": [],
       "name": "description",
       "outputs": [
@@ -906,6 +1271,130 @@
       "type": "function"
     },
     {
+      "inputs": [],
+      "name": "escrowFactory",
+      "outputs": [
+        {
+          "internalType": "contract AffiliateEscrowFactory",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_auctionId",
+          "type": "uint256"
+        }
+      ],
+      "name": "getAuctionData",
+      "outputs": [
+        {
+          "components": [
+            {
+              "internalType": "uint256",
+              "name": "tokenId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "tokenContract",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "highestBid",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "endTime",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "startTime",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "reservePrice",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint16",
+              "name": "affiliateFee",
+              "type": "uint16"
+            },
+            {
+              "internalType": "address",
+              "name": "auctionOwner",
+              "type": "address"
+            },
+            {
+              "internalType": "address payable",
+              "name": "bidder",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "affiliate",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "arbiter",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "escrowAddress",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "auctionCurrency",
+              "type": "address"
+            },
+            {
+              "internalType": "uint16",
+              "name": "minBidIncrementBps",
+              "type": "uint16"
+            },
+            {
+              "internalType": "bool",
+              "name": "isPremiumAuction",
+              "type": "bool"
+            },
+            {
+              "internalType": "uint16",
+              "name": "premiumBps",
+              "type": "uint16"
+            },
+            {
+              "internalType": "uint256",
+              "name": "timeExtension",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "paymentAmount",
+              "type": "uint256"
+            }
+          ],
+          "internalType": "struct IAuctionHouse.Auction",
+          "name": "",
+          "type": "tuple"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
       "inputs": [
         {
           "internalType": "uint256",
@@ -926,7 +1415,7 @@
     },
     {
       "inputs": [],
-      "name": "image",
+      "name": "houseName",
       "outputs": [
         {
           "internalType": "string",
@@ -939,12 +1428,31 @@
     },
     {
       "inputs": [],
-      "name": "name",
+      "name": "image",
       "outputs": [
         {
           "internalType": "string",
           "name": "",
           "type": "string"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_auctionId",
+          "type": "uint256"
+        }
+      ],
+      "name": "isAuctionActive",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
         }
       ],
       "stateMutability": "view",
@@ -964,6 +1472,40 @@
       "type": "function"
     },
     {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "operator",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "from",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "tokenId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bytes",
+          "name": "",
+          "type": "bytes"
+        }
+      ],
+      "name": "onERC721Received",
+      "outputs": [
+        {
+          "internalType": "bytes4",
+          "name": "",
+          "type": "bytes4"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
       "inputs": [],
       "name": "owner",
       "outputs": [
@@ -974,6 +1516,13 @@
         }
       ],
       "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "renounceOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
       "type": "function"
     },
     {
@@ -1036,19 +1585,6 @@
         }
       ],
       "name": "rescueETH",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "_newDeadline",
-          "type": "uint256"
-        }
-      ],
-      "name": "setSettlementDeadline",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"
@@ -1133,6 +1669,19 @@
     {
       "inputs": [
         {
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "transferOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
           "internalType": "string",
           "name": "_name",
           "type": "string"
@@ -1149,6 +1698,19 @@
         }
       ],
       "name": "updateAuctionHouseMetadata",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_newDeadline",
+          "type": "uint256"
+        }
+      ],
+      "name": "updateSettlementDeadline",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"

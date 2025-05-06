@@ -13,7 +13,7 @@ interface IAuctionHouse {
         uint256 tokenId;
         address tokenContract;
         uint256 highestBid;
-        uint256 duration;
+        uint256 endTime;
         uint256 startTime;
         uint256 reservePrice;
         uint16 affiliateFee;
