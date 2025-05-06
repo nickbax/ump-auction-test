@@ -43,6 +43,13 @@ contract AuctionItemERC721 is IERC4906, ERC721URIStorage, Ownable {
     // Events for OpenSea compatibility
     event ContractURIUpdated(string newURI);
     event OwnershipChanged(address indexed previousOwner, address indexed newOwner);
+    event TokenMetadataUpdated(
+        uint256 indexed tokenId,
+        string name,
+        string description,
+        string image,
+        string termsOfService
+    );
 
     constructor(string memory name_, string memory symbol_, string memory contractURI_) 
         ERC721(name_, symbol_) 
@@ -68,6 +75,16 @@ contract AuctionItemERC721 is IERC4906, ERC721URIStorage, Ownable {
     ) public onlyOwner returns (uint256) {
         uint256 tokenId = mint(to);
         setTokenMetadata(tokenId, name, description, image, termsOfService, supplementalImages);
+        
+        // Emit metadata update event for The Graph
+        emit TokenMetadataUpdated(
+            tokenId,
+            name,
+            description,
+            image,
+            termsOfService
+        );
+        
         return tokenId;
     }
 
@@ -92,6 +109,18 @@ contract AuctionItemERC721 is IERC4906, ERC721URIStorage, Ownable {
         // Generate and set the token URI
         string memory tokenURI = generateTokenURI(tokenId);
         _setTokenURI(tokenId, tokenURI);
+        
+        // Emit metadata update event for The Graph
+        emit TokenMetadataUpdated(
+            tokenId,
+            name,
+            description,
+            image,
+            termsOfService
+        );
+        
+        // Also emit the ERC-4906 event for metadata update
+        emit MetadataUpdate(tokenId);
     }
 
     function generateTokenURI(uint256 tokenId) public view returns (string memory) {
